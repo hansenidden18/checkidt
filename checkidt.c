@@ -2,8 +2,11 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <asm/desc.h>
+#include <linux/kallsyms.h>
 
 #define IDT_ENTRIES 256
+#define MAX_LINE_LENGTH 256
+
 
 static gate_desc idt[IDT_ENTRIES];
 
@@ -14,13 +17,9 @@ static void print_idt_entry(int vector)
     unsigned short seg_selector;
     unsigned char dpl;
     const char *type;
-
+    char handler_name[KSYM_NAME_LEN];
+    
     entry = &idt[vector];
-    // Read the IDT descriptor
-    //idt = (gate_desc *)idtr.address;
-
-    // Get the IDT entry for the specified vector
-
     // Extract the necessary information
 #ifdef CONFIG_X86_64
     address = ((unsigned long)entry->offset_high << 32) |
@@ -39,9 +38,17 @@ static void print_idt_entry(int vector)
         type = "Trap gate";
     else
         type = "Unknown";
-
-    pr_info("%-4d   0x%-10lx  %-11x   %-3d   %-16s\n",
-            vector, address, seg_selector, dpl, type);
+    
+    sprint_symbol(handler_name, address);
+    if (handler_name[0]) {
+   	pr_info("%-4d   0x%-10lx  %-11x   %-3d   %-16s   %s\n",
+                vector, address, seg_selector, dpl, type, handler_name);
+    } else {
+        pr_info("%-4d   0x%-10lx  %-11x   %-3d   %-16s   Handler name not found\n",
+                vector, address, seg_selector, dpl, type);
+    }
+//    pr_info("%-4d   0x%-10lx  %-11x   %-3d   %-16s\n",
+//            vector, address, seg_selector, dpl, type);
 }
 
 static int __init mymodule_init(void)
@@ -52,7 +59,7 @@ static int __init mymodule_init(void)
     store_idt(&idtr);
     memcpy(idt, (gate_desc *)idtr.address, sizeof(gate_desc) * IDT_ENTRIES);
 
-    pr_info("Int *** Stub Address * Segment *** DPL * Type\n");
+    pr_info("Int *** Stub Address * Segment *** DPL * Type  ***   Handler Name\n");
     pr_info("--------------------------------------------------\n");
     
     // Print the IDT table entries
@@ -73,4 +80,5 @@ module_init(mymodule_init);
 module_exit(mymodule_exit);
 
 MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Hansen");
 MODULE_DESCRIPTION("IDT Table Printer");
