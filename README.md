@@ -1,9 +1,18 @@
-# checkidt
+# CheckIDT
 
-sudo make
+To install this module:
+```
+$ sudo make
 
-sudo insmod checkidt.ko
+$ sudo insmod checkidt.ko
 
-lsmod
+$ lsmod
 
-dmesg
+$ dmesg
+```
+Always check where is your build-essentials are kept:
+
+```
+$ find / | grep include/generated/autoconf.h
+```
+change the make on Makefile according to your build-essentials folder
