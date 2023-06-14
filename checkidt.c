@@ -3,12 +3,45 @@
 #include <linux/sched.h>
 #include <asm/desc.h>
 #include <linux/kallsyms.h>
+#include <linux/kprobes.h>
+#include <linux/irq.h>
+#include <linux/irqdesc.h>
+#include <linux/interrupt.h>
 
 #define IDT_ENTRIES 256
 #define MAX_LINE_LENGTH 256
 
+/*
+static struct kprobe kp = {
+    .symbol_name = "kallsyms_lookup_name"
+};
+*/
 
 static gate_desc idt[IDT_ENTRIES];
+
+void print_irq_handler_name(int irq) {
+    struct irq_desc *desc = irq_to_desc(irq);
+    struct irqaction *action;
+    char handler_name[KSYM_NAME_LEN];
+
+    if (!desc) {
+        pr_info("IRQ %d: Not found\n", irq);
+        return;
+    }
+
+    raw_spin_lock(&desc->lock);
+    action = desc->action;
+    if (action) {
+        sprint_symbol_no_offset(handler_name, (unsigned long)action->handler);
+        if (handler_name[0]){
+            pr_info("IRQ %d: *** Interrupt Name: %s  ***  Handler Name: %s\n",
+                        irq, action->name, handler_name);
+        }
+    } else {
+        pr_info("IRQ %d: No handler\n", irq);
+    }
+    raw_spin_unlock(&desc->lock);
+}
 
 static void print_idt_entry(int vector)
 {
@@ -18,8 +51,9 @@ static void print_idt_entry(int vector)
     unsigned char dpl;
     const char *type;
     char handler_name[KSYM_NAME_LEN];
-    
+
     entry = &idt[vector];
+
     // Extract the necessary information
 #ifdef CONFIG_X86_64
     address = ((unsigned long)entry->offset_high << 32) |
@@ -38,34 +72,40 @@ static void print_idt_entry(int vector)
         type = "Trap gate";
     else
         type = "Unknown";
-    
-    sprint_symbol(handler_name, address);
+    /*
+    typedef unsigned long (*symbol_lookup_t)(long unsigned int);
+    symbol_lookup_t symbol_lookup;
+    register_kprobe(&kp);
+    symbol_lookup = (symbol_lookup_t) kp.addr;
+    unregister_kprobe(&kp);
+    */
+
+    sprint_symbol_no_offset(handler_name, address);
     if (handler_name[0]) {
-   	pr_info("%-4d   0x%-10lx  %-11x   %-3d   %-16s   %s\n",
+        pr_info("%-4d   0x%-10lx  %-11x   %-3d   %-16s   %s\n",
                 vector, address, seg_selector, dpl, type, handler_name);
     } else {
         pr_info("%-4d   0x%-10lx  %-11x   %-3d   %-16s   Handler name not found\n",
                 vector, address, seg_selector, dpl, type);
     }
-//    pr_info("%-4d   0x%-10lx  %-11x   %-3d   %-16s\n",
-//            vector, address, seg_selector, dpl, type);
 }
 
 static int __init mymodule_init(void)
 {
     struct desc_ptr idtr;
     int vector;
-    
+
     store_idt(&idtr);
     memcpy(idt, (gate_desc *)idtr.address, sizeof(gate_desc) * IDT_ENTRIES);
 
-    pr_info("Int *** Stub Address * Segment *** DPL * Type  ***   Handler Name\n");
-    pr_info("--------------------------------------------------\n");
-    
+    pr_info("Int *** Stub Address * Segment *** DPL * Type  ***   Handler Stub\n");
+    pr_info("-----------------------------------------------------------------\n");
+
     // Print the IDT table entries
     for (vector = 0; vector < IDT_ENTRIES; vector++)
     {
         print_idt_entry(vector);
+        print_irq_handler_name(vector);
     }
 
     return 0;
